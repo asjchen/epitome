@@ -1,13 +1,14 @@
 # LeNet model
 
 from collections import OrderedDict
+import numpy as np
 
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 
 class LeNet(nn.Module):
-    def __init__(self, activation=nn.Tanh(), batch_size=64, num_epochs=20, learning_rate=3e-1, learning_rate_decay=0.05):
+    def __init__(self, activation=nn.ReLU(), batch_size=64, num_epochs=30, learning_rate=1e-2, learning_rate_decay=0.0):
         super(LeNet, self).__init__()
         self.input_height = 28
         self.input_width = 28
@@ -57,11 +58,25 @@ class LeNet(nn.Module):
         self.learning_rate = learning_rate
         self.learning_rate_decay = learning_rate_decay
 
-    def preprocess_inputs(self, raw_X, raw_y):
+    def preprocess_X(self, raw_X):
         flat_X = torch.tensor(raw_X, dtype=torch.float32)
-        dataset = TensorDataset(torch.reshape(flat_X, (-1, 1, self.input_height, self.input_width)) / 255, 
-            torch.tensor(raw_y, dtype=torch.long))
-        return DataLoader(dataset, batch_size=64, shuffle=True)
+        return torch.reshape(flat_X, (-1, 1, self.input_height, self.input_width)) / 255
+
+    def preprocess_train_inputs(self, raw_X, raw_y, val_prop=0.2):
+        val_size = int(0.2 * raw_X.shape[0])
+        indices = np.arange(raw_X.shape[0])
+        np.random.shuffle(indices)
+        train_X, val_X = raw_X[indices[val_size:]], raw_X[indices[: val_size]]
+        train_y, val_y = raw_y[indices[val_size:]], raw_y[indices[: val_size]]
+
+        train_dataset = TensorDataset(self.preprocess_X(train_X), 
+            torch.tensor(train_y, dtype=torch.long))
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+
+        val_dataset = TensorDataset(self.preprocess_X(val_X), 
+            torch.tensor(val_y, dtype=torch.long))
+        val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=True)
+        return train_loader, val_loader
 
     def forward(self, X):
         return self.model(X)
@@ -69,17 +84,13 @@ class LeNet(nn.Module):
     def predict(self, X):
         return torch.argmax(self.forward(X), dim=1)
 
-    def train(self, train_X, train_y, val_X=None, val_y=None):
-        print(f'Training Set Size: {train_X.shape[0]}')
-        phase_data = [('train', self.preprocess_inputs(train_X, train_y))]
-        if val_X and val_y:
-            phase_data.append(('val', self.preprocess_inputs(val_X, val_y)))
+    def train_on_dataset(self, raw_X, raw_y, save_path=None):
+        train_loader, val_loader = self.preprocess_train_inputs(raw_X, raw_y)
+        phase_data = [('train', train_loader), ('val', val_loader)]
         
         loss_fxn = nn.CrossEntropyLoss()
         optimizer = torch.optim.SGD(
             self.model.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(
-            optimizer, gamma=self.learning_rate_decay)
         for epoch in range(self.num_epochs):
             print(f'Epoch {epoch + 1}:')
             for phase, data_loader in phase_data:
@@ -90,6 +101,7 @@ class LeNet(nn.Module):
 
                 total_loss = 0.0
                 total_correct = 0.0
+                total_size = 0.0
 
                 for X, y in data_loader:
                     optimizer.zero_grad()
@@ -100,23 +112,22 @@ class LeNet(nn.Module):
 
                         class_pred = self.predict(X)
                         total_correct += (class_pred == y).sum().item()
+                        total_size += X.size(0)
                         if phase == 'train':
                             loss.backward()
                             optimizer.step()
 
-                print(f'{phase.upper()} LOSS: {total_loss}')
-                print(f'{phase.upper()} ACCURACY: {total_correct / train_X.shape[0]}')
+                print(f'{phase.upper()} AVERAGE LOSS: {total_loss / total_size}')
+                print(f'{phase.upper()} ACCURACY: {total_correct / total_size}')
+        if save_path:
+            torch.save(self.model.state_dict(), save_path)
 
-            # TODO: evaluate and print
-            # TODO: print accuracy
-            # TODO: check the schedule
-            scheduler.step()
+    def predict_on_dataset(self, raw_X):
+        X = self.preprocess_X(raw_X)
+        return self.predict(X).numpy()
 
-            
-
-        # save model
-
+    def load_saved_state(self, path):
+        self.model.load_state_dict(torch.load(path))
+        self.model.eval()
 
 
-
-# TODO: make sure to make input (n, 1, h, w) rather than (n, h, w)
