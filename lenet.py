@@ -8,11 +8,12 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 
 class LeNet(nn.Module):
-    def __init__(self, activation=nn.ReLU(), batch_size=64, num_epochs=30, learning_rate=1e-2, learning_rate_decay=0.0):
+    def __init__(self, activation=nn.ReLU(), batch_size=64, num_epochs=30, learning_rate=1e-2, 
+        opt_num_epochs=1000, opt_learning_rate=1):
         super(LeNet, self).__init__()
         self.input_height = 28
         self.input_width = 28
-        self.model = nn.Sequential(OrderedDict([
+        self.classifier = nn.Sequential(OrderedDict([
             ('conv1', nn.Conv2d(
                 in_channels=1, 
                 out_channels=6, 
@@ -54,9 +55,10 @@ class LeNet(nn.Module):
             )),
         ]))
         self.num_epochs = num_epochs
+        self.opt_num_epochs = opt_num_epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate
-        self.learning_rate_decay = learning_rate_decay
+        self.opt_learning_rate = opt_learning_rate
 
     def preprocess_X(self, raw_X):
         flat_X = torch.tensor(raw_X, dtype=torch.float32)
@@ -79,7 +81,7 @@ class LeNet(nn.Module):
         return train_loader, val_loader
 
     def forward(self, X):
-        return self.model(X)
+        return self.classifier(X.clamp(min=0, max=1))
 
     def predict(self, X):
         return torch.argmax(self.forward(X), dim=1)
@@ -90,14 +92,14 @@ class LeNet(nn.Module):
         
         loss_fxn = nn.CrossEntropyLoss()
         optimizer = torch.optim.SGD(
-            self.model.parameters(), lr=self.learning_rate)
+            self.classifier.parameters(), lr=self.learning_rate)
         for epoch in range(self.num_epochs):
             print(f'Epoch {epoch + 1}:')
             for phase, data_loader in phase_data:
                 if phase == 'train':
-                    self.model.train()
+                    self.classifier.train()
                 else:
-                    self.model.eval()
+                    self.classifier.eval()
 
                 total_loss = 0.0
                 total_correct = 0.0
@@ -120,14 +122,39 @@ class LeNet(nn.Module):
                 print(f'{phase.upper()} AVERAGE LOSS: {total_loss / total_size}')
                 print(f'{phase.upper()} ACCURACY: {total_correct / total_size}')
         if save_path:
-            torch.save(self.model.state_dict(), save_path)
+            torch.save(self.classifier.state_dict(), save_path)
 
     def predict_on_dataset(self, raw_X):
         X = self.preprocess_X(raw_X)
         return self.predict(X).numpy()
 
     def load_saved_state(self, path):
-        self.model.load_state_dict(torch.load(path))
-        self.model.eval()
+        self.classifier.load_state_dict(torch.load(path))
+        self.classifier.eval()
+
+    def optimize_for_digit(self, target_digit, num_samples=10):
+        assert target_digit in range(10)
+        loss_fxn = nn.CrossEntropyLoss()
+        X = torch.rand(num_samples, 1, self.input_height, self.input_width)
+        y = torch.tensor([target_digit] * num_samples, dtype=torch.long)
+        # optimizer = torch.optim.LBFGS([X.requires_grad_()])
+        optimizer = torch.optim.SGD([X.requires_grad_()], lr=self.opt_learning_rate)
+        for epoch in range(self.opt_num_epochs):
+            print(f'Epoch {epoch + 1}:')
+            # def closure():
+            #     optimizer.zero_grad()
+            #     y_pred = self.forward(X)
+            #     loss = loss_fxn(y_pred, y)
+            #     loss.backward()
+            #     print(f'Loss: {loss.item()}')
+            #     return loss
+            optimizer.zero_grad()
+            y_pred = self.forward(X)
+            loss = loss_fxn(y_pred, y)
+            loss.backward()
+            print(f'Loss: {loss.item()}')
+            #optimizer.step(closure)
+            optimizer.step()
+        return X.detach().clamp(0, 1).numpy().reshape((num_samples, self.input_height, self.input_width)) * 255
 
 
