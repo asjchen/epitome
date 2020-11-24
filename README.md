@@ -10,8 +10,12 @@ however, when starting with random noise, the input optimization simply yields
 more seemingly random noise. When starting with an actual image of a 1 from 
 the training set, the optimization hardly modifies the original image.
 
-!(The "Perfect" 1 from Random Noise)[examples/digit_1_from_uniform_random_noise.png]
-!(The "Perfect" 1 from Training)[examples/digit_1_from_training.png]
+![The "Perfect" 1 from Random Noise](examples/digit_1_from_uniform_random_noise.png)
+The "Perfect" 1 from Random Noise
+
+
+![The "Perfect" 1 from Training](examples/digit_1_from_training.png)
+The "Perfect" 1 from a Training Image
 
 
 ## Training the CNN
