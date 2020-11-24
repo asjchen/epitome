@@ -29,7 +29,10 @@ def main():
     model.train_on_dataset(train_X, train_y, save_path=name)
 
     test_predictions = model.predict_on_dataset(test_X)
-    pred_df = pd.DataFrame({'ImageId': np.arange(1, test_X.shape[0] + 1), 'Label': test_predictions})
+    pred_df = pd.DataFrame({
+        'ImageId': np.arange(1, test_X.shape[0] + 1), 
+        'Label': test_predictions
+    })
     pred_df.to_csv(f'{name}_predictions.csv', index=False)
 
 

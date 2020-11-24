@@ -132,29 +132,26 @@ class LeNet(nn.Module):
         self.classifier.load_state_dict(torch.load(path))
         self.classifier.eval()
 
-    def optimize_for_digit(self, target_digit, num_samples=10):
+    def optimize_for_digit(self, target_digit, num_samples=10, starter_X=None):
         assert target_digit in range(10)
         loss_fxn = nn.CrossEntropyLoss()
-        X = torch.rand(num_samples, 1, self.input_height, self.input_width)
+        if starter_X is None:
+            X = torch.rand(num_samples, 1, self.input_height, self.input_width)
+        else:
+            X = self.preprocess_X(starter_X)
         y = torch.tensor([target_digit] * num_samples, dtype=torch.long)
-        # optimizer = torch.optim.LBFGS([X.requires_grad_()])
         optimizer = torch.optim.SGD([X.requires_grad_()], lr=self.opt_learning_rate)
         for epoch in range(self.opt_num_epochs):
             print(f'Epoch {epoch + 1}:')
-            # def closure():
-            #     optimizer.zero_grad()
-            #     y_pred = self.forward(X)
-            #     loss = loss_fxn(y_pred, y)
-            #     loss.backward()
-            #     print(f'Loss: {loss.item()}')
-            #     return loss
             optimizer.zero_grad()
             y_pred = self.forward(X)
             loss = loss_fxn(y_pred, y)
             loss.backward()
             print(f'Loss: {loss.item()}')
-            #optimizer.step(closure)
             optimizer.step()
-        return X.detach().clamp(0, 1).numpy().reshape((num_samples, self.input_height, self.input_width)) * 255
+        final_X = X.detach().clamp(0, 1).numpy()
+        return (final_X.reshape(
+            (num_samples, self.input_height, self.input_width)
+        ) * 255).astype(np.uint8)
 
 
